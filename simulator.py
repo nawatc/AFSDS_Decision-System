@@ -4,9 +4,22 @@ class artillery_simulator:
     time = 0
     ArtilleyList = []
     TargetAreaDict = {}
+    RateOfFire_PerSec = {}
 
     def __init__(self):
         pass
+
+    ################### Artilley Class ###################
+    class Artilley:
+        """
+        """
+        Name = ""
+        EnemyInTargetArea = []
+        RateOfFire_PerSec = 0
+        def __init__(self, Name :str, EnemyInTargetArea :list[str], RateOfFire :float):
+            self.Name = Name
+            self.EnemyInTargetArea = EnemyInTargetArea
+            self.RateOfFire_PerSec = RateOfFire
 
     ################### Artilley Method ###################
     def addNewArtilley(self, ArtilleyName, EnemyInRangeList :list[str]):
@@ -34,7 +47,15 @@ class artillery_simulator:
         pass
 
     def RunSimulator(self):
-        pass
+        
+        AllEnemy = []
+
+        while AllEnemy != []:
+            pass
+
+            #self.getClosestTIme()
+            
+
 
 
     class set_area:
@@ -43,22 +64,34 @@ class artillery_simulator:
 
 
             
-################### Example Use ###################
-bf1 = artillery_simulator()
-
-bf1.addNewArtilley("BigA", ["1", "2" ,"3"])
-bf1.addNewArtilley("BigB", ["3", "4" ,"5"])
-
-print(bf1.getArtilleyList())
-
-for i in bf1.getArtilleyList():
-    print(bf1.getEnemyInTargetArea(i))
 
 
 
 
 
 
+def main():
+    ################### Example Use ###################
+
+    # Declare Simulator Object
+    bf1 = artillery_simulator()
+
+    # Add Artilley Obj to Simulator
+    bf1.addNewArtilley("BigA", ["1", "2" ,"3"])
+    bf1.addNewArtilley("BigB", ["3", "4" ,"5"])
+
+    # Get List of Artilley in Simulator
+    print(bf1.getArtilleyList())
+
+    # Get Enemy in Target Area of Artilley in Simulator
+    for i in bf1.getArtilleyList():
+        print(i , bf1.getEnemy(i))
+
+    # Run Simulator
+    bf1.RunSimulator()
+
+if __name__ == "__main__":
+    main()
 
 
 
