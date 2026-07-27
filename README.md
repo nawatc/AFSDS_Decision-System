@@ -4,7 +4,7 @@
 
 on Windows
 ```
-git clone https://github.com/nawatc/AFSDS_Decision-System.git && cd AFSDS_Decision-System && test_docker_build-run.bat && curl_test.bat
+git clone https://github.com/nawatc/AFSDS_Decision-System.git && cd AFSDS_Decision-System && start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe" && test_docker_build-run.bat && curl_test.bat
 ```
 
 ## Install pip package
