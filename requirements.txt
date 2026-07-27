@@ -1,1 +1,6 @@
-fastapi[standard]
+fastapi
+uvicorn
+pydantic
+numpy
+gymnasium
+geopy
