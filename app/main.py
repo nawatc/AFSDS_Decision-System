@@ -9,7 +9,7 @@ import os
 import numpy as np
 
 from wta_env import WeaponTargetAssignmentEnv
-from train_dqn import train, get_best_action, get_ranked_actions_per_weapon, save_model, load_model
+from train_dqn import train, get_best_action, get_ranked_actions_per_weapon, save_model, load_model, verify_all_q_values_found
 
 
 
@@ -65,6 +65,7 @@ class CandidateCone(BaseModel):
     cone_angle_left: str
     cone_angle_right: str
     cone_radii_m: List[float] = Field(default_factory=list)
+    unit_wei: str
     distance_from_cone_center_m: str
     distance_to_cone_boundary_m: str
 
@@ -82,14 +83,8 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     # Add your processing logic (save to DB, trigger alerts, etc.) below.
     payload_dict = payload.model_dump()
 
-    
-    NUM_WEAPONS = len(payload_dict["candidate_cones"])
-    # print(len(payload_dict["candidate_cones"]))
-    print("NUM_WEAPONS = ", NUM_WEAPONS)
+    # print(payload_dict)
 
-    NUM_TARGETS = 1
-    # print(payload_dict["enemy_launch_point"])
-    print("NUM_TARGETS = ", NUM_TARGETS)
 
     #     T1 T2 T3 ...
     # W1
@@ -109,9 +104,14 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     # KILL_PROB = np.array( [   [1, 2],
     #                           [3, 4]]
     #                                     )
+    NUM_WEAPONS = len(payload_dict["candidate_cones"])
+    print("NUM_WEAPONS = ", NUM_WEAPONS)
+
+    NUM_TARGETS = 1
+    print("NUM_TARGETS = ", NUM_TARGETS)
+
     KILL_PROB = np.zeros((NUM_WEAPONS, NUM_TARGETS))
     for weapon in range(0,len(KILL_PROB)):
-
         for target in range(0 ,len(KILL_PROB[weapon, :])):
 
             # Calulate Distance and Rate Probability of Kill (KILL_PROB)
@@ -132,7 +132,7 @@ async def receive_artillery_event(payload: ArtilleryEvent):
             # Rate Probability of Kill (KILL_PROB)
             range_est = float(payload_dict["candidate_cones"][weapon]["distance_from_cone_center_m"])
             # print(payload_dict["candidate_cones"][weapon]["distance_from_cone_center_m"])
-            KILL_PROB_est = 0.4
+            # KILL_PROB_est = 0.4
 
             if payload_dict["candidate_cones"][weapon]["cone_name"] == "ปืน 105":
                 if range_est < 5000:
@@ -140,16 +140,25 @@ async def receive_artillery_event(payload: ArtilleryEvent):
                 elif range_est >= 5000 and range_est < 7500:
                     KILL_PROB_est = 0.8
                 elif range_est >= 7500 and range_est < 10000:
-                    KILL_PROB_est = 0.75
-                elif range_est >= 10000:
                     KILL_PROB_est = 0.7
-            if payload_dict["candidate_cones"][weapon]["cone_name"] == "ปืน DTI":
+                elif range_est >= 10000:
+                    KILL_PROB_est = 0.6
+            elif payload_dict["candidate_cones"][weapon]["cone_name"] == "ปืน DTI":
                 if range_est < 5000:
                     KILL_PROB_est = 0.6
                 elif range_est >= 5000 and range_est < 7500:
                     KILL_PROB_est = 0.5
                 elif range_est >= 7500 and range_est < 10000:
-                    KILL_PROB_est = 0.45
+                    KILL_PROB_est = 0.4
+                elif range_est >= 10000:
+                    KILL_PROB_est = 0.4
+            else:
+                if range_est < 5000:
+                    KILL_PROB_est = 0.7
+                elif range_est >= 5000 and range_est < 7500:
+                    KILL_PROB_est = 0.6
+                elif range_est >= 7500 and range_est < 10000:
+                    KILL_PROB_est = 0.5
                 elif range_est >= 10000:
                     KILL_PROB_est = 0.4
             
@@ -168,56 +177,73 @@ async def receive_artillery_event(payload: ArtilleryEvent):
 
     # TARGET_VALUE = np.array(  [2.0, 8.0, 5.0, 9.0]    )
     # Range 0.1 to 10.0
-    TARGET_VALUE = np.empty(1)
-    TARGET_VALUE[0] = 10.0
-
-    # for target in TARGET_VALUE:
-    #     print(target)
+    TARGET_VALUE = np.array(  [1.0]    )
     print("TARGET_VALUE = ", TARGET_VALUE)
+
+    # print(payload_dict["candidate_cones"][0])
+    WEAPON_VALUE = np.empty(NUM_WEAPONS)
+
+    for weapon in range(0, NUM_WEAPONS):
+        if float(payload_dict["candidate_cones"][weapon]["unit_wei"]) >= 100.0:
+            T_value = 10.0
+        elif float(payload_dict["candidate_cones"][weapon]["unit_wei"]) >= 0:
+            T_value = float(payload_dict["candidate_cones"][weapon]["unit_wei"]) / 10.0
+        else:
+            T_value = 0.0
+
+        # print(T_value)
+
+        WEAPON_VALUE[weapon] = T_value
+
+    print("WEAPON_VALUE = ", WEAPON_VALUE)
 
 
 
     # --------------------------------------------------------------------------
 
-    # Model filename is tied to the problem size, so changing NUM_WEAPONS/NUM_TARGETS
-    # above always trains/loads a matching checkpoint instead of accidentally
-    # loading a model shaped for a different size.
     MODEL_PATH = f"wta_dqn_{NUM_WEAPONS}w_{NUM_TARGETS}t.pt"
-
-    assert KILL_PROB.shape == (NUM_WEAPONS, NUM_TARGETS), (
-        f"KILL_PROB shape {KILL_PROB.shape} must match "
-        f"(NUM_WEAPONS, NUM_TARGETS) = ({NUM_WEAPONS}, {NUM_TARGETS})"
-    )
-    assert TARGET_VALUE.shape == (NUM_TARGETS,), (
-        f"TARGET_VALUE shape {TARGET_VALUE.shape} must match (NUM_TARGETS,) = ({NUM_TARGETS},)"
-    )
-
     # 1. Get a trained Q-network: load from disk if available, else train one.
     if os.path.exists(MODEL_PATH):
         print(f"Loading trained model from {MODEL_PATH} ...")
         q_net = load_model(MODEL_PATH)
     else:
         print("No saved model found, training a small one (this may take a bit) ...")
-        q_net, _ = train(num_weapons=NUM_WEAPONS, num_targets=NUM_TARGETS, num_episodes=2000)
+        q_net, _ = train(num_weapons=NUM_WEAPONS, num_targets=NUM_TARGETS, num_episodes=1000)
         save_model(q_net, MODEL_PATH)
 
     # 2. Set up the environment and load the (random or custom) scenario above
     #    as the current state.
     env = WeaponTargetAssignmentEnv(num_weapons=NUM_WEAPONS, num_targets=NUM_TARGETS)
-    obs, info = env.reset(options={"kill_prob": KILL_PROB, "target_value": TARGET_VALUE})
+    obs, info = env.reset(options={
+        "kill_prob": KILL_PROB,
+        "target_value": TARGET_VALUE,
+        "weapon_value": WEAPON_VALUE,
+    })
 
     print("\nStarting a new episode. Kill probability matrix (weapons x targets):")
     print(env.kill_prob.round(2))
     print("Target values:", env.target_value.round(2))
+    print("Weapon values:", env.weapon_value.round(2))
 
     # 3. Repeatedly ask the model for the best action given the current state.
     step = 0
     done = False
     total_reward = 0.0
     prediction_result = []
-    
+
     while not done:
         action_mask = info["action_mask"]
+
+        # Confirm the network produced a finite Q-value for EVERY one of
+        # num_weapons * num_targets actions before trusting its argmax --
+        # i.e. make sure all Q values are actually found, nothing missing.
+        q_check = verify_all_q_values_found(q_net, obs, env.num_weapons, env.num_targets)
+        if not q_check["complete"]:
+            print(f"  [WARNING] Step {step + 1}: Q-value grid incomplete! "
+                  f"expected {q_check['expected_count']}, got {q_check['actual_count']}, "
+                  f"bad indices: {q_check['missing_or_bad_indices']}")
+        else:
+            print(f"--- Step {step + 1}: verified all {q_check['expected_count']} Q-values present and finite ---")
 
         # Ground-truth reward the env would give for EVERY possible action
         # right now (not a network estimate -- computed from the reward formula).
@@ -230,7 +256,6 @@ async def receive_artillery_event(payload: ArtilleryEvent):
         print(f"--- Step {step + 1}: top actions by actual reward ---")
         for w, t, r in top_rewards:
             print(f"  weapon {w} -> target {t}: reward={r:.2f}")
-        print(top_rewards)
 
         # Same, but excluding targets that already have a weapon assigned to
         # them -- i.e. results where no target repeats.
@@ -261,7 +286,7 @@ async def receive_artillery_event(payload: ArtilleryEvent):
         total_reward += reward
         step += 1
 
-        prediction_result.append({           # <-- ADD THIS
+        prediction_result.append({
         "weapon": weapon_idx,
         "target": target_idx,
         "reward": round(float(reward), 4),
@@ -271,37 +296,35 @@ async def receive_artillery_event(payload: ArtilleryEvent):
         print(f"Step {step}: assign weapon {weapon_idx} -> target {target_idx} "
               f"| reward={reward:.3f} | objective (lower=better)={info['objective_value']:.3f}")
 
-        
-        
 
+        if step == 1:
+            step_1_action_reward = np.round(all_rewards, 2)
+            step_1_top_unique = top_unique
 
     print(f"\nEpisode finished in {step} steps. "
           f"Total expected damage dealt: {total_reward:.3f}")
     print(f"Final expected surviving target value: {info['objective_value']:.3f}")
+    print(f"Total weapon value used: {info['total_weapon_value_used']:.3f}")
 
+    # 4. Compare against a pure greedy baseline on the EXACT same scenario --
+    #    greedy always takes the single locally-best action (no lookahead),
+    #    while the DQN can learn to hold weapons back for a better long-term
+    #    outcome. Lower final_objective is better.
+    # greedy_env = WeaponTargetAssignmentEnv(num_weapons=NUM_WEAPONS, num_targets=NUM_TARGETS)
+    # greedy_env.reset(options={
+    #     "kill_prob": KILL_PROB,
+    #     "target_value": TARGET_VALUE,
+    #     "weapon_value": WEAPON_VALUE,
+    # })
+    # greedy_result = greedy_env.greedy_solve()
 
-    """
-    return {
-        "status": "received",
-        "event_id": payload.event_id,
-        "launch_point": {
-            "id": payload.enemy_launch_point.id,
-            "lat": payload.enemy_launch_point.lat,
-            "lon": payload.enemy_launch_point.lon,
-        },
-        "impact_point": {
-            "id": payload.enemy_impact_point.id,
-            "lat": payload.enemy_impact_point.lat,
-            "lon": payload.enemy_impact_point.lon,
-        },
-        "candidate_cone_count": len(payload.candidate_cones),
-        "result": {
-        
-        }
-    }
-    
-    """
-    print(prediction_result)
+    # print("\n=== Greedy baseline on the same scenario (no lookahead) ===")
+    # for w, t, r in greedy_result["assignments"]:
+    #     print(f"  weapon {w} -> target {t}: reward={r:.3f}")
+    # print(f"  total_reward={greedy_result['total_reward']}, "
+    #       f"final_objective={greedy_result['final_objective']} (lower is better)")
+    # print(f"\nDQN final_objective={info['objective_value']:.4f} vs "
+    #       f"Greedy final_objective={greedy_result['final_objective']} (lower is better)")
 
     response_data = {
         "status": "received",
@@ -319,28 +342,50 @@ async def receive_artillery_event(payload: ArtilleryEvent):
         "candidate_cone_count": len(payload.candidate_cones),
         "event_id": payload.event_id,
     }
-    if top_unique:
-        top_return = top_unique
-    elif top_rewards:
-        top_return = top_rewards
+
+    print("top_unique        :" , step_1_top_unique)
+    print("prediction_result :" , prediction_result)
+
+    for i in range(0, len(prediction_result)):
+        prediction_result[i] = (prediction_result[i]['weapon'], prediction_result[i]['target'], prediction_result[i]['reward'])
+    prediction_result = sorted(prediction_result, key=lambda x: x[-1], reverse=True)
+    
+    # top_return = step_1_action_reward
+    top_return = step_1_top_unique
+    # top_return = prediction_result
+
+    # Data from      Q Learning
+    print("top_unique        :" , step_1_top_unique)
+    # Data from Deep Q Learning
+    print("prediction_result :" , prediction_result)
+
+    if len(top_return) > 3:
+        top_return = top_return[0:3]
     else:
-        top_return = []
+        pass
+    # print(top_return)
 
     top_result = []
-
+    # print(top_result)
+    
+    my_rank = 1
     for w, t, r in top_return:
         print(f"  weapon {w} -> target {t}: reward={r:.2f}")
 
         top_result.append(  {   
-                                "weapon_id" : w,
-                                "weapon"    : payload_dict["candidate_cones"][w],
-                                "target_id" : t,
-                                "target"    : payload_dict["enemy_launch_point"],
-                                "reward"    : r
+                                "weapon_rank"   : my_rank,
+                                "weapon_id"     : w,
+                                "weapon"        : payload_dict["candidate_cones"][w],
+                                "target_id"     : t,
+                                "target"        : payload_dict["enemy_launch_point"],
+
+                                "reward"        : r
                          }  )
-    result_dict = {}
+        my_rank = my_rank + 1
 
     response_data["result"] = top_result
+
+    # print(response_data)
 
     return response_data
 

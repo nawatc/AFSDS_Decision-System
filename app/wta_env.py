@@ -12,6 +12,10 @@ Problem definition
 - Each weapon `i` has a probability `p[i, j]` of destroying target `j` if
   assigned to it (a "kill probability").
 - Each target `j` has a value `v[j]` (its importance / damage potential).
+- Each weapon `i` also has a value `w[i]` (ITS importance / damage
+  potential -- e.g. a more capable/powerful weapon contributes
+  proportionally more expected damage credit when it successfully hits a
+  target, mirroring target_value but on the weapon side).
 - Assigning multiple weapons to the same target is allowed; kill events are
   assumed independent, so the probability that target `j` survives after a
   set S of weapons is assigned to it is:
@@ -34,9 +38,10 @@ Environment framing for RL
   `num_weapons * num_targets` (flattened) so it works with a standard
   Discrete-action DQN.
 - Reward at each step = decrease in expected surviving value caused by
-  that assignment (i.e., how much expected damage the action produced).
-  This makes cumulative episode reward exactly equal to the (negative of
-  the) WTA objective improvement, so maximizing reward == solving WTA.
+  that assignment, scaled by that weapon's own value/damage potential
+  (weapon_value[i]) -- so a more capable weapon earns proportionally more
+  credit for the same kill probability, and the agent learns to match
+  high-value weapons to high-payoff assignments.
 - Choosing an already-assigned weapon is an invalid action: it is penalized
   and does not change state (helps the agent learn action masking even
   without an explicit mask, though a mask is also exposed via `info`).
@@ -49,6 +54,7 @@ A flat float32 vector containing:
   - kill_prob_matrix       (num_weapons*num_targets,)  flattened p[i,j]
   - target_survival_prob   (num_targets,)   current survive(j) for each target
   - target_value_norm      (num_targets,)   v[j] normalized to [0,1]
+  - weapon_value_norm      (num_weapons,)   w[i] normalized to [0,1]
 
 Usage
 -----
@@ -81,6 +87,7 @@ class WeaponTargetAssignmentEnv(gym.Env):
         num_targets: int = 4,
         kill_prob_range: tuple[float, float] = (0.3, 0.9),
         target_value_range: tuple[float, float] = (1.0, 10.0),
+        weapon_value_range: tuple[float, float] = (1.0, 10.0),
         invalid_action_penalty: float = 1.0,
         max_invalid_actions: int = 10,
         render_mode: str | None = None,
@@ -90,6 +97,7 @@ class WeaponTargetAssignmentEnv(gym.Env):
         self.num_targets = num_targets
         self.kill_prob_range = kill_prob_range
         self.target_value_range = target_value_range
+        self.weapon_value_range = weapon_value_range
         self.invalid_action_penalty = invalid_action_penalty
         self.max_invalid_actions = max_invalid_actions
         self.render_mode = render_mode
@@ -102,6 +110,7 @@ class WeaponTargetAssignmentEnv(gym.Env):
             + self.num_weapons * self.num_targets  # kill prob matrix
             + self.num_targets                   # current survival prob
             + self.num_targets                   # normalized target value
+            + self.num_weapons                   # normalized weapon value
         )
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32
@@ -110,6 +119,7 @@ class WeaponTargetAssignmentEnv(gym.Env):
         # Populated in reset()
         self.kill_prob: np.ndarray | None = None
         self.target_value: np.ndarray | None = None
+        self.weapon_value: np.ndarray | None = None
         self.assigned_mask: np.ndarray | None = None
         self.survival_prob: np.ndarray | None = None
         self._invalid_count = 0
@@ -130,6 +140,36 @@ class WeaponTargetAssignmentEnv(gym.Env):
             self.kill_prob = np.asarray(options["kill_prob"], dtype=np.float32)
             self.target_value = np.asarray(options["target_value"], dtype=np.float32)
             self.num_weapons, self.num_targets = self.kill_prob.shape
+
+            # weapon_value is optional even in a custom scenario -- default
+            # to all-ones (no importance difference between weapons) if not given.
+            if "weapon_value" in options:
+                self.weapon_value = np.asarray(options["weapon_value"], dtype=np.float32)
+            else:
+                self.weapon_value = np.ones(self.num_weapons, dtype=np.float32)
+
+            # Guard against bad inputs -- these are the #1 source of nan
+            # propagating into rewards, Q-values, and eventually training.
+            if np.isnan(self.kill_prob).any():
+                raise ValueError("kill_prob contains nan values; every entry must be a real "
+                                  "number in [0, 1]. Check the scenario you supplied.")
+            if np.isnan(self.target_value).any():
+                raise ValueError("target_value contains nan values; every entry must be a "
+                                  "real, finite number. Check the scenario you supplied.")
+            if np.isnan(self.weapon_value).any():
+                raise ValueError("weapon_value contains nan values; every entry must be a "
+                                  "real, finite number. Check the scenario you supplied.")
+            if (self.kill_prob < 0).any() or (self.kill_prob > 1).any():
+                raise ValueError("kill_prob must contain only values in [0, 1].")
+            if (self.target_value < 0).any():
+                raise ValueError("target_value must contain only non-negative values.")
+            if (self.weapon_value < 0).any():
+                raise ValueError("weapon_value must contain only non-negative values.")
+            if self.weapon_value.shape != (self.num_weapons,):
+                raise ValueError(
+                    f"weapon_value shape {self.weapon_value.shape} must match "
+                    f"(num_weapons,) = ({self.num_weapons},)"
+                )
         else:
             lo, hi = self.kill_prob_range
             self.kill_prob = self._rng.uniform(
@@ -139,6 +179,11 @@ class WeaponTargetAssignmentEnv(gym.Env):
             vlo, vhi = self.target_value_range
             self.target_value = self._rng.uniform(
                 vlo, vhi, size=self.num_targets
+            ).astype(np.float32)
+
+            wlo, whi = self.weapon_value_range
+            self.weapon_value = self._rng.uniform(
+                wlo, whi, size=self.num_weapons
             ).astype(np.float32)
 
         self.assigned_mask = np.zeros(self.num_weapons, dtype=np.float32)
@@ -172,8 +217,13 @@ class WeaponTargetAssignmentEnv(gym.Env):
 
             new_expected_survival = self.target_value[target_idx] * self.survival_prob[target_idx]
 
-            # Reward = expected damage dealt (reduction in surviving value)
-            reward = float(prev_expected_survival - new_expected_survival)
+            # Reward = expected damage dealt (reduction in surviving value),
+            # scaled by this weapon's own value/damage potential. A more
+            # capable/valuable weapon earns proportionally more credit for
+            # achieving the same kill probability -- mirroring how
+            # target_value scales the importance of the target being hit.
+            expected_damage = prev_expected_survival - new_expected_survival
+            reward = float(expected_damage * self.weapon_value[weapon_idx])
 
             if self.assigned_mask.sum() == self.num_weapons:
                 terminated = True
@@ -188,6 +238,7 @@ class WeaponTargetAssignmentEnv(gym.Env):
         print("Assigned mask:", self.assigned_mask)
         print("Survival prob:", np.round(self.survival_prob, 3))
         print("Target values:", np.round(self.target_value, 2))
+        print("Weapon values:", np.round(self.weapon_value, 2))
         print("Expected surviving value (objective, lower is better):",
               round(float(np.sum(self.target_value * self.survival_prob)), 3))
 
@@ -196,12 +247,14 @@ class WeaponTargetAssignmentEnv(gym.Env):
     # ------------------------------------------------------------------ #
     def _get_obs(self) -> np.ndarray:
         value_norm = self.target_value / max(self.target_value.max(), 1e-8)
+        weapon_value_norm = self.weapon_value / max(self.weapon_value.max(), 1e-8)
         obs = np.concatenate(
             [
                 self.assigned_mask,
                 self.kill_prob.flatten(),
                 self.survival_prob,
                 value_norm,
+                weapon_value_norm,
             ]
         ).astype(np.float32)
         return obs
@@ -213,6 +266,7 @@ class WeaponTargetAssignmentEnv(gym.Env):
             "action_mask": action_mask,
             "objective_value": float(np.sum(self.target_value * self.survival_prob)),
             "weapons_remaining": int(self.num_weapons - self.assigned_mask.sum()),
+            "total_weapon_value_used": float(np.sum(self.assigned_mask * self.weapon_value)),
         }
 
     def valid_actions(self) -> np.ndarray:
@@ -241,10 +295,10 @@ class WeaponTargetAssignmentEnv(gym.Env):
                   there's no meaningful "reward" for reusing them -- the
                   real env.step() would instead return -invalid_action_penalty).
         """
-        # reward(i, j) = value[j] * survival[j] * kill_prob[i, j]
-        # (this is prev_expected_survival - new_expected_survival, simplified)
-        rewards = self.target_value[np.newaxis, :] * self.survival_prob[np.newaxis, :] * self.kill_prob
-        rewards = rewards.astype(np.float32)
+        # reward(i, j) = weapon_value[i] * value[j] * survival[j] * kill_prob[i, j]
+        # (expected damage, scaled by this weapon's own importance/damage potential)
+        expected_damage = self.target_value[np.newaxis, :] * self.survival_prob[np.newaxis, :] * self.kill_prob
+        rewards = (expected_damage * self.weapon_value[:, np.newaxis]).astype(np.float32)
         rewards[self.assigned_mask == 1.0, :] = np.nan
         return rewards
 
@@ -290,6 +344,53 @@ class WeaponTargetAssignmentEnv(gym.Env):
             for idx in order
         ]
         return ranked
+
+    def greedy_solve(self) -> dict:
+        """
+        Solve the environment's CURRENT state to completion using a pure
+        greedy heuristic: at every remaining step, exhaustively evaluate
+        every (weapon, target) pair's actual reward (get_ranked_action_rewards)
+        and take the single best one. No lookahead, no network involved --
+        this is a ground-truth baseline for comparing a trained policy against.
+
+        NOTE: this mutates the environment -- it steps it all the way to
+        the end, exactly like manually calling env.step() in a loop. Call
+        env.reset() again afterward if you need a fresh episode.
+
+        Returns
+        -------
+        dict with:
+          - assignments    : list of (weapon_idx, target_idx, reward) in the
+                             order they were taken
+          - total_reward   : sum of all rewards collected
+          - final_objective: objective_value after the last step (lower = better)
+          - steps_taken    : number of assignments made
+        """
+        assignments = []
+        total_reward = 0.0
+        info = self._get_info()
+
+        while True:
+            ranked = self.get_ranked_action_rewards(top_k=1, unique_targets=False)
+            if not ranked:
+                break  # no weapons left to assign
+
+            weapon_idx, target_idx, _ = ranked[0]
+            action = weapon_idx * self.num_targets + target_idx
+            obs, reward, terminated, truncated, info = self.step(action)
+
+            assignments.append((weapon_idx, target_idx, float(reward)))
+            total_reward += reward
+
+            if terminated or truncated:
+                break
+
+        return {
+            "assignments": assignments,
+            "total_reward": round(total_reward, 4),
+            "final_objective": round(info["objective_value"], 4),
+            "steps_taken": len(assignments),
+        }
 
 
 if __name__ == "__main__":
