@@ -201,14 +201,17 @@ async def receive_artillery_event(payload: ArtilleryEvent):
 
 
     WEAPON_VALUE = np.zeros(NUM_WEAPONS)
-        # data                            [1.0, 2.0, 3.0, 4.0]
-        # scaled_data     WEAPON_VALUE =  [1.0 4.0 7.0 10.0]
-        # data                            [1.0, 2.0, 3.0, 999.0]
-        # scaled_data     WEAPON_VALUE =  [1.0 1.0 1.0 10.0]
+        # data                            [  1.0, 2.0, 3.0,   4.0]
+        # scaled_data     WEAPON_VALUE =  [  1.0  4.0  7.0   10.0]
+        # data                            [  1.0, 2.0, 3.0, 999.0]
+        # scaled_data     WEAPON_VALUE =  [  1.0  1.0  1.0   10.0]
+        # data                            [500.0 , 211.0, 341.0, 723.0]
+        # scaled_data     WEAPON_VALUE =  [[ 6.1     1.0    3.3   10.0 ]]
+        
     WEAPON_WEIGHT = []
     WEAPON_WEIGHT_scaled_data = []
 
-    # Find Min / Max of unit_wei
+    # Find Min / Max from unit_wei
     for weapon in range(0, NUM_WEAPONS):
         WEAPON_WEIGHT.append(round(float(payload_dict["candidate_cones"][weapon]["unit_wei"]), 2))
 
@@ -217,33 +220,36 @@ async def receive_artillery_event(payload: ArtilleryEvent):
 
     # Min-Max scaling to range 1.0 to 10.0
     if WEAPON_WEIGHT_min == WEAPON_WEIGHT_max:
+        # If min-max is equal mean all data is same.
         WEAPON_VALUE = np.ones(NUM_WEAPONS)
 
     else:
+        # Else Find Min-Max Scaling to 1 to 10
         for weapon in range(0, NUM_WEAPONS):
 
             data = float(payload_dict["candidate_cones"][weapon]["unit_wei"])
 
             # print(data)
 
+            # Min-Max Scaling to 0 to 1
             WEAPON_VALUE[weapon] = ((data - WEAPON_WEIGHT_min) / (WEAPON_WEIGHT_max - WEAPON_WEIGHT_min))
-            print(WEAPON_VALUE[weapon])
+            # Min-Max Scaling to 1 to 10
             WEAPON_VALUE[weapon] = ( WEAPON_VALUE[weapon] * (10 - 1) ) + 1
-            print(WEAPON_VALUE[weapon])
+            # round to 1.0
             WEAPON_VALUE[weapon] = round(float(WEAPON_VALUE[weapon]), 1)
 
     print("WEAPON_VALUE = ", WEAPON_VALUE)
 
 
-    # TARGET_VALUE = np.array(  [2.0, 8.0, 5.0, 9.0]    )
-    # Range 0.1 to 10.0
+    # TARGET_VALUE = [7.]
+    # TARGET_VALUE set by number of reasons
     TARGET_VALUE = np.array( [1.0] )
-
-    print("asd")
-    print(len(payload_dict["anomaly_analysis"]["reasons"]))
-    print(type(payload_dict["anomaly_analysis"]["reasons"]))
-
-
+    if payload_dict["anomaly_analysis"]["is_anomaly"] == True:
+        # IF Anomaly set to number of reasons.
+        TARGET_VALUE[0] = len(payload_dict["anomaly_analysis"]["reasons"])
+    else:
+        # IF not Anomaly set to 1.0
+        TARGET_VALUE = np.array( [1.0] )
 
     print("TARGET_VALUE = ", TARGET_VALUE)
 
