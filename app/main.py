@@ -250,7 +250,7 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     TARGET_VALUE = np.array( [1.0] )
     if payload_dict["anomaly_analysis"]["is_anomaly"] == True:
         # IF Anomaly set to number of reasons.
-        TARGET_VALUE[0] = len(payload_dict["anomaly_analysis"]["reasons"])
+        TARGET_VALUE[0] = len(payload_dict["anomaly_analysis"]["reasons"]) + 1
     else:
         # IF not Anomaly set to 1.0
         TARGET_VALUE = np.array( [1.0] )
