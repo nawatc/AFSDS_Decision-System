@@ -1,0 +1,171 @@
+{
+  "event_id": "ARTY_DEMO_VERY_ABNORMAL_4C_fire_1785492714.1647913",
+  "enemy_launch_point": {
+    "id": "DEMO_VERY_ABNORMAL_4C",
+    "name": "หน่วยยิง DEMO_VERY_ABNORMAL_4C",
+    "feature_key": "ARTY_DEMO_VERY_ABNORMAL_4C_fire_1785492714.1647913",
+    "event_time": "07-31-2026/01:30:00",
+    "timestamp": 1785492714.1647913,
+    "lat": 14.355283046089287,
+    "lon": 103.70953451735957,
+    "height": 5000,
+    "heading": 360,
+    "weapon_type": "PHL-03",
+    "source": "ARTY",
+    "zone": "48P",
+    "east": "360848",
+    "north": "1587408",
+    "dis": 120000,
+    "firV": 2200,
+    "firEL": 20020
+  },
+  "enemy_impact_point": {
+    "id": "DEMO_VERY_ABNORMAL_4C",
+    "feature_key": "ARTY_DEMO_VERY_ABNORMAL_4C_fall_1785492714.1647913",
+    "event_time": "07-31-2026/01:30:00",
+    "timestamp": 1785492714.1647913,
+    "lat": 15.43980060527272,
+    "lon": 103.7095267419679,
+    "height": null,
+    "heading": 360,
+    "weapon_type": "PHL-03",
+    "source": "ARTY"
+  },
+  "candidate_cones": [
+    {
+      "cone_id": 170,
+      "overlay_id": 71,
+      "feature_id": "overlay-3-1785384920891-5",
+      "cone_name": "M101 A1_1",
+      "plan_id": 6,
+      "mission_id": 5,
+      "unit_id": 1,
+      "center_lat": 14.47622797848275,
+      "center_lon": 103.64764480064731,
+      "cone_angle": "46.0125",
+      "cone_heading": "152.49692168387503",
+      "cone_angle_left": "23.00625",
+      "cone_angle_right": "23.00625",
+      "cone_radii_m": [1500, 8000, 17500],
+      "unit_wei": "1",
+      "distance_from_cone_center_m": "14953.69",
+      "distance_to_cone_boundary_m": "2489.69"
+    },
+    {
+      "cone_id": 171,
+      "overlay_id": 71,
+      "feature_id": "overlay-3-1785384960989-6",
+      "cone_name": "M101 A1_2",
+      "plan_id": 6,
+      "mission_id": 5,
+      "unit_id": 1,
+      "center_lat": 14.501407489438323,
+      "center_lon": 103.70847114794412,
+      "cone_angle": "46.0125",
+      "cone_heading": "160.87004234229607",
+      "cone_angle_left": "23.00625",
+      "cone_angle_right": "23.00625",
+      "cone_radii_m": [1500, 8000, 17500],
+      "unit_wei": "1",
+      "distance_from_cone_center_m": "16168.09",
+      "distance_to_cone_boundary_m": "1252.99"
+    },
+    {
+      "cone_id": 172,
+      "overlay_id": 71,
+      "feature_id": "overlay-3-1785385233535-8",
+      "cone_name": "SR-4",
+      "plan_id": 6,
+      "mission_id": 5,
+      "unit_id": 1,
+      "center_lat": 14.50015816632781,
+      "center_lon": 103.6347758004332,
+      "cone_angle": "203.9625",
+      "cone_heading": "165",
+      "cone_angle_left": "101.98125",
+      "cone_angle_right": "101.98125",
+      "cone_radii_m": [10000, 30000, 40000],
+      "unit_wei": "1",
+      "distance_from_cone_center_m": "17942.36",
+      "distance_to_cone_boundary_m": "17942.36"
+    },
+    {
+      "cone_id": 173,
+      "overlay_id": 71,
+      "feature_id": "overlay-3-1785385392485-9",
+      "cone_name": "ATMG",
+      "plan_id": 6,
+      "mission_id": 5,
+      "unit_id": 1,
+      "center_lat": 14.415172313809245,
+      "center_lon": 103.46233568490756,
+      "cone_angle": "49.5",
+      "cone_heading": "127.825350121008",
+      "cone_angle_left": "24.75",
+      "cone_angle_right": "24.75",
+      "cone_radii_m": [3000, 30000, 50000],
+      "unit_wei": "1",
+      "distance_from_cone_center_m": "27471.91",
+      "distance_to_cone_boundary_m": "302.36"
+    }
+  ],
+  "anomaly_analysis": {
+    "is_anomaly": true,
+    "model_anomaly": true,
+    "model_decision_score": -0.1033015767115617,
+    "reasons": [
+      "abnormal_distance",
+      "abnormal_velocity",
+      "abnormal_elevation",
+      "abnormal_height",
+      "abnormal_time",
+      "abnormal_location",
+      "unknown_weapon"
+    ],
+    "explanation": "abnormal_distance, abnormal_velocity, abnormal_elevation, abnormal_height, abnormal_time, abnormal_location, unknown_weapon",
+    "service_error": null,
+    "location": {
+      "abnormal": true,
+      "cluster_id": 2,
+      "distance_to_cluster_center": 0.1384411587998486,
+      "threshold": 0.05041075622359151,
+      "input": {
+        "latitude": 14.355283046089287,
+        "longitude": 103.70953451735957
+      },
+      "cluster_center": {
+        "latitude": 14.278780792105648,
+        "longitude": 103.59415098480285
+      }
+    },
+    "weapon": {
+      "type": "PHL-03",
+      "frequency": 0,
+      "rare_threshold": 0.03,
+      "rare": false,
+      "unknown": true
+    },
+    "status": "anomaly",
+    "status_th": "ผิดปกติ",
+    "status_message_th": "ตรวจพบความผิดปกติ",
+    "reasons_th": [
+      "ระยะยิงผิดปกติ",
+      "ความเร็วต้นผิดปกติ",
+      "มุมยิงผิดปกติ",
+      "ความสูงของจุดยิงผิดปกติ",
+      "ช่วงเวลาการยิงผิดปกติ",
+      "ตำแหน่งจุดยิงผิดปกติ",
+      "ตรวจพบชนิดอาวุธที่ไม่รู้จัก"
+    ],
+    "reason_details": [
+      {"code": "abnormal_distance", "message": "ระยะยิงผิดปกติ"},
+      {"code": "abnormal_velocity", "message": "ความเร็วต้นผิดปกติ"},
+      {"code": "abnormal_elevation", "message": "มุมยิงผิดปกติ"},
+      {"code": "abnormal_height", "message": "ความสูงของจุดยิงผิดปกติ"},
+      {"code": "abnormal_time", "message": "ช่วงเวลาการยิงผิดปกติ"},
+      {"code": "abnormal_location", "message": "ตำแหน่งจุดยิงผิดปกติ"},
+      {"code": "unknown_weapon", "message": "ตรวจพบชนิดอาวุธที่ไม่รู้จัก"}
+    ],
+    "explanation_th": "ระยะยิงผิดปกติ, ความเร็วต้นผิดปกติ, มุมยิงผิดปกติ, ความสูงของจุดยิงผิดปกติ, ช่วงเวลาการยิงผิดปกติ, ตำแหน่งจุดยิงผิดปกติ, ตรวจพบชนิดอาวุธที่ไม่รู้จัก"
+  }
+}

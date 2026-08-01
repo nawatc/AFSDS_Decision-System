@@ -82,10 +82,16 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     # payload is already validated and parsed into typed objects here.
     # Add your processing logic (save to DB, trigger alerts, etc.) below.
     payload_dict = payload.model_dump()
-
     # print(payload_dict)
 
+    NUM_WEAPONS = len(payload_dict["candidate_cones"])
+    print("NUM_WEAPONS = ", NUM_WEAPONS)
 
+    NUM_TARGETS = 1
+    print("NUM_TARGETS = ", NUM_TARGETS)
+
+    # Row -> Weapon
+    # Col -> Target
     #     T1 T2 T3 ...
     # W1
     # W2
@@ -100,15 +106,6 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     #     [0.7, 0.4, 0.3, 0.5],
     #     [0.5, 0.5, 0.6, 0.6],
     # ])
-
-    # KILL_PROB = np.array( [   [1, 2],
-    #                           [3, 4]]
-    #                                     )
-    NUM_WEAPONS = len(payload_dict["candidate_cones"])
-    print("NUM_WEAPONS = ", NUM_WEAPONS)
-
-    NUM_TARGETS = 1
-    print("NUM_TARGETS = ", NUM_TARGETS)
 
     KILL_PROB = np.zeros((NUM_WEAPONS, NUM_TARGETS))
     for weapon in range(0,len(KILL_PROB)):
@@ -300,6 +297,8 @@ async def receive_artillery_event(payload: ArtilleryEvent):
         if step == 1:
             step_1_action_reward = np.round(all_rewards, 2)
             step_1_top_unique = top_unique
+
+            print(ranked)
 
     print(f"\nEpisode finished in {step} steps. "
           f"Total expected damage dealt: {total_reward:.3f}")
