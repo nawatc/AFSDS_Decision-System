@@ -3,4 +3,4 @@ uvicorn
 pydantic
 numpy
 gymnasium
-geopy
+scikit-learn
