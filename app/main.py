@@ -153,7 +153,7 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     # ])
 
     # FInd KILL_PROB weight by range 
-    KILL_PROB_range_weight = np.zeros((NUM_WEAPONS, NUM_TARGETS))
+    KILL_PROB_range_zone_weight = np.zeros((NUM_WEAPONS, NUM_TARGETS))
     for weapon in range(0,len(KILL_PROB)):
         for target in range(0 ,len(KILL_PROB[weapon, :])):
             weapon_range = float(payload_dict["candidate_cones"][weapon]["distance_from_cone_center_m"])
@@ -161,24 +161,44 @@ async def receive_artillery_event(payload: ArtilleryEvent):
             Max_Active_Indirect_range = payload_dict["candidate_cones"][weapon]["cone_radii_m"][1]
             Max_Extended_Indirect_range = payload_dict["candidate_cones"][weapon]["cone_radii_m"][2]
 
-            # Calu Which range type Target in and set KILL_PROB_range_weight
+            # Calu Which range type Target in and set KILL_PROB_range_zone_weight
             if weapon_range < Min_Active_Indirect_range:
                 # If Target in Close range
-                KILL_PROB_range_weight[weapon, target] = 0.0    # KILL_PROB   0 %
+                KILL_PROB_range_zone_weight[weapon, target] = 0.0    # KILL_PROB   0 %
             elif weapon_range <= Max_Active_Indirect_range:
                 # If Target in Active range
-                KILL_PROB_range_weight[weapon, target] = 1.0    # KILL_PROB 100 %
+                KILL_PROB_range_zone_weight[weapon, target] = 1.0    # KILL_PROB 100 %
             elif weapon_range < Max_Extended_Indirect_range:
                 # If Target in Extend range
-                KILL_PROB_range_weight[weapon, target] = 0.8    # KILL_PROB  80 %
+                KILL_PROB_range_zone_weight[weapon, target] = 0.8    # KILL_PROB  80 %
+    print("KILL_PROB_range_zone_weight", KILL_PROB_range_zone_weight)
 
-            # Weighted Average by 1.00 (100 %)
-            KILL_PROB = (
-                        (KILL_PROB_range_weight * 1.00)     \
-                                                            \
-                        ) / 1.00
 
-            print("Weapon :", weapon  , payload_dict["candidate_cones"][weapon]["cone_name"] ," --> TARGET" \
+    KILL_PROB_range_num_weight = np.zeros((NUM_WEAPONS, NUM_TARGETS))
+    for weapon in range(0,len(KILL_PROB)):
+        for target in range(0 ,len(KILL_PROB[weapon, :])):
+            weapon_range = float(payload_dict["candidate_cones"][weapon]["distance_from_cone_center_m"])
+            min_range = payload_dict["candidate_cones"][weapon]["cone_radii_m"][0]
+            max_range = payload_dict["candidate_cones"][weapon]["cone_radii_m"][2]
+
+            # Calc range weight by Min Max Scailing to 0.0 - 1.0
+            KILL_PROB_range_num_weight[weapon, target] = (weapon_range - min_range) / (max_range - min_range)
+
+            # Invert Scailing
+            KILL_PROB_range_num_weight[weapon, target] = (KILL_PROB_range_num_weight[weapon, target] * (-1) ) + 1.0
+
+    print("KILL_PROB_range_num_weight", KILL_PROB_range_num_weight)
+
+
+    # Weighted Average by 1.00 (100 %)
+    KILL_PROB = (                                                \
+                    (
+                        (KILL_PROB_range_zone_weight  * 0.80) +  \
+                        (KILL_PROB_range_num_weight   * 0.20)    \
+                    )                                            \
+                / 1.00 )
+
+    print("Weapon :", weapon  , payload_dict["candidate_cones"][weapon]["cone_name"] ," --> TARGET" \
                   , target,  payload_dict["enemy_launch_point"]["name"] ,"\tKILL_PROB Rate : ",KILL_PROB[weapon, target])
 
 
