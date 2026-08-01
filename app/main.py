@@ -3,8 +3,6 @@ from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-
-
 import os
 import numpy as np
 
@@ -70,11 +68,51 @@ class CandidateCone(BaseModel):
     distance_to_cone_boundary_m: str
 
 
+class LocationAnalysis(BaseModel):
+    abnormal: bool
+    cluster_id: int
+    distance_to_cluster_center: float
+    threshold: float
+    input: dict  # {"latitude": float, "longitude": float}
+    cluster_center: dict  # {"latitude": float, "longitude": float}
+
+
+class WeaponAnalysis(BaseModel):
+    type: str
+    frequency: float
+    rare_threshold: float
+    rare: bool
+    unknown: bool
+
+
+class ReasonDetail(BaseModel):
+    code: str
+    message: str
+
+
+class AnomalyAnalysis(BaseModel):
+    is_anomaly: bool
+    model_anomaly: bool
+    model_decision_score: Optional[float] = None
+    reasons: List[str] = Field(default_factory=list)
+    explanation: Optional[str] = None
+    service_error: Optional[str] = None
+    location: Optional[LocationAnalysis] = None
+    weapon: Optional[WeaponAnalysis] = None
+    status: Optional[str] = None
+    status_th: Optional[str] = None
+    status_message_th: Optional[str] = None
+    reasons_th: List[str] = Field(default_factory=list)
+    reason_details: List[ReasonDetail] = Field(default_factory=list)
+    explanation_th: Optional[str] = None
+
+
 class ArtilleryEvent(BaseModel):
     event_id: str
     enemy_launch_point: EnemyLaunchPoint
     enemy_impact_point: EnemyImpactPoint
     candidate_cones: List[CandidateCone] = Field(default_factory=list)
+    anomaly_analysis: AnomalyAnalysis
 
 
 @app.post("/events/artillery")
@@ -90,6 +128,7 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     NUM_TARGETS = 1
     print("NUM_TARGETS = ", NUM_TARGETS)
 
+    KILL_PROB = np.zeros((NUM_WEAPONS, NUM_TARGETS))
     # Row -> Weapon
     # Col -> Target
     #     T1 T2 T3 ...
@@ -97,7 +136,7 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     # W2
     # W3
     # ...
-
+    
     # KILL_PROB = np.array([
     #     [0.8, 0.3, 0.5, 0.2],
     #     [0.4, 0.7, 0.6, 0.3],
@@ -107,21 +146,9 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     #     [0.5, 0.5, 0.6, 0.6],
     # ])
 
-    KILL_PROB = np.zeros((NUM_WEAPONS, NUM_TARGETS))
     for weapon in range(0,len(KILL_PROB)):
         for target in range(0 ,len(KILL_PROB[weapon, :])):
 
-            # Calulate Distance and Rate Probability of Kill (KILL_PROB)
-            # FRIEND_WEAPON_lat = 1
-            # FRIEND_WEAPON_lon = 1
-            
-            # TARGET_lat = 1
-            # TARGET_lon = 1
-            # 
-
-            # Circular Error Probable (CEP) of M101A2
-            # Ref. https://en.wikipedia.org/wiki/Circular_error_probable
-            # Use Estimate Value
             # print(type(payload_dict["candidate_cones"][weapon]["distance_from_cone_center_m"]))
 
 
@@ -172,27 +199,53 @@ async def receive_artillery_event(payload: ArtilleryEvent):
     print("KILL_PROB = ")
     print(KILL_PROB)
 
-    # TARGET_VALUE = np.array(  [2.0, 8.0, 5.0, 9.0]    )
-    # Range 0.1 to 10.0
-    TARGET_VALUE = np.array(  [1.0]    )
-    print("TARGET_VALUE = ", TARGET_VALUE)
 
-    # print(payload_dict["candidate_cones"][0])
-    WEAPON_VALUE = np.empty(NUM_WEAPONS)
+    WEAPON_VALUE = np.zeros(NUM_WEAPONS)
+        # data                            [1.0, 2.0, 3.0, 4.0]
+        # scaled_data     WEAPON_VALUE =  [1.0 4.0 7.0 10.0]
+        # data                            [1.0, 2.0, 3.0, 999.0]
+        # scaled_data     WEAPON_VALUE =  [1.0 1.0 1.0 10.0]
+    WEAPON_WEIGHT = []
+    WEAPON_WEIGHT_scaled_data = []
 
+    # Find Min / Max of unit_wei
     for weapon in range(0, NUM_WEAPONS):
-        if float(payload_dict["candidate_cones"][weapon]["unit_wei"]) >= 100.0:
-            T_value = 10.0
-        elif float(payload_dict["candidate_cones"][weapon]["unit_wei"]) >= 0:
-            T_value = float(payload_dict["candidate_cones"][weapon]["unit_wei"]) / 10.0
-        else:
-            T_value = 0.0
+        WEAPON_WEIGHT.append(round(float(payload_dict["candidate_cones"][weapon]["unit_wei"]), 2))
 
-        # print(T_value)
+    WEAPON_WEIGHT_min = min(WEAPON_WEIGHT)
+    WEAPON_WEIGHT_max = max(WEAPON_WEIGHT)
 
-        WEAPON_VALUE[weapon] = T_value
+    # Min-Max scaling to range 1.0 to 10.0
+    if WEAPON_WEIGHT_min == WEAPON_WEIGHT_max:
+        WEAPON_VALUE = np.ones(NUM_WEAPONS)
+
+    else:
+        for weapon in range(0, NUM_WEAPONS):
+
+            data = float(payload_dict["candidate_cones"][weapon]["unit_wei"])
+
+            # print(data)
+
+            WEAPON_VALUE[weapon] = ((data - WEAPON_WEIGHT_min) / (WEAPON_WEIGHT_max - WEAPON_WEIGHT_min))
+            print(WEAPON_VALUE[weapon])
+            WEAPON_VALUE[weapon] = ( WEAPON_VALUE[weapon] * (10 - 1) ) + 1
+            print(WEAPON_VALUE[weapon])
+            WEAPON_VALUE[weapon] = round(float(WEAPON_VALUE[weapon]), 1)
 
     print("WEAPON_VALUE = ", WEAPON_VALUE)
+
+
+    # TARGET_VALUE = np.array(  [2.0, 8.0, 5.0, 9.0]    )
+    # Range 0.1 to 10.0
+    TARGET_VALUE = np.array( [1.0] )
+
+    print("asd")
+    print(len(payload_dict["anomaly_analysis"]["reasons"]))
+    print(type(payload_dict["anomaly_analysis"]["reasons"]))
+
+
+
+    print("TARGET_VALUE = ", TARGET_VALUE)
 
 
 
